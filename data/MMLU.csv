@@ -1,0 +1,23 @@
+Model,MMLU
+gpt-4-turbo-2024-04-09,86.5
+claude-3-haiku-20240307,75.2
+Qwen/Qwen1.5-72B-Chat,77.2
+mistralai/Mixtral-8x7B-Instruct-v0.1,71.4
+zero-one-ai/Yi-34B-Chat,74.87
+gpt-35-turbo-0125,70
+meta-llama/Llama-2-70b-chat-hf,63.91
+meta-llama/Llama-3-70b-chat-hf,80.06
+models/gemini-1.5-pro-latest,81.9
+deepseek-ai/deepseek-llm-67b-chat, 71.3
+glm-4,81.5
+minimax-abab6.5-chat,78.7
+wenxin-4,-1
+SenseChat-5,84.7
+Baichuan3,81.6
+Baichuan2-Turbo-192k,-1
+reka-flash-20240226,75.9
+reka-core-20240501,83.2
+mistral-large-2402,81.2
+command-r-plus,75.7
+qwen-max-0428,-1
+gpt-4o-2024-05-13,87.2
