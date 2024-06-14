@@ -12,7 +12,6 @@ class Generator:
         self.model_name = model_name
         self.domains = promptor.domain_list
         if promptor.lang == 'en':
-            self.domains = promptor.domain_list
             self.question_file = question_file
         else:
             # don't overlap with previous debate questions

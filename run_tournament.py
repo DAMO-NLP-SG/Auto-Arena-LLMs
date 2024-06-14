@@ -7,6 +7,7 @@ from utils.score_utils import compute_mle_elo, calculate_win_rate
 import pandas as pd
 from collections import defaultdict
 import os
+from utils.prompts import Prompter
 
 def pair_players(
     names: List[str], previous_matchups: Dict[str, set]
@@ -59,17 +60,9 @@ if __name__ == "__main__":
     parser.add_argument("--language", type=str, default='en', help="language used for evaluation")
     
     args = parser.parse_args()
-    if args.language == 'zh' and 'zh' not in args.tournament_dir:
-        raise Exception("Mismatch between language and tournament directory. Please use a directory with 'zh' in the name.")
-    if args.language not in ['en', 'zh']:
-        raise Exception("Invalid language. Choose either 'en' or 'zh'.")
-    # if args.language == 'en':
-    #     args.all_judge_file = 'data/all_results/all_judge_results_LD.jsonl'
-    #     args.all_debate_file = 'data/all_results/all_debate_history_LD.jsonl'
-    # elif args.language == 'zh':
-    #     args.all_judge_file = 'data/all_results/all_judge_results_LD_zh.jsonl'
-    #     args.all_debate_file = 'data/all_results/all_debate_history_LD_zh.jsonl'
-
+    if args.language != 'en' and args.language not in args.tournament_dir:
+        raise Exception(f"Mismatch between language and tournament directory. Please use a directory with {args.language} in the name.")
+    
     if args.language == 'en':
         # 7 models initially
         player_names = ['gpt-4-turbo-2024-04-09', 'Qwen/Qwen1.5-72B-Chat', 'claude-3-haiku-20240307',
@@ -81,7 +74,7 @@ if __name__ == "__main__":
                         'Qwen/Qwen1.5-72B-Chat', 'zero-one-ai/Yi-34B-Chat', 
                         'deepseek-ai/deepseek-llm-67b-chat', 'glm-4', 
                         'wenxin-4', 'minimax-abab6.5-chat', 'SenseChat-5']
-    
+        
     # organized according to MMLU ranking
     mmlu_ratings = pd.read_csv('data/MMLU.csv')
     mmlu_ratings = mmlu_ratings[mmlu_ratings['Model'].isin(player_names)]
@@ -92,6 +85,7 @@ if __name__ == "__main__":
         raise Exception(f'Provide initial MMLU scores of {missing_players} in data/MMLU.csv!')
     else:
         player_names = mmlu_ratings['Model'].tolist()
+
     ############################################################
     ##################### INITIALIZATION #######################
     ############################################################
@@ -113,11 +107,12 @@ if __name__ == "__main__":
     ############################################################
     ################### 1. LOAD QUESTIONS ######################
     ############################################################
-
+    promptor = Prompter(args.language)
+    
     # load questions
-    questions = load_question_from_generator(args.question_save_file, args.num_each_domain_to_load, language = args.language)
+    questions = load_question_from_generator(promptor, args.question_save_file, args.num_each_domain_to_load)
     all_judge_results = []
-
+    elos_dfs = []
     # for each round
     for round_num in range(num_rounds):
         print('***************** ROUND', round_num+1, '*****************')
@@ -126,7 +121,7 @@ if __name__ == "__main__":
         # Sort by scores, then initial seed
         player_names.sort(
             key=lambda p: (-scores[p], initial_seeding.index(p))
-        )  
+        ) 
         # pair players
         pairings = pair_players(
             list(player_names), previous_matchups
@@ -145,9 +140,6 @@ if __name__ == "__main__":
             print('----------------- Match:', model_a, model_b, '-----------------')
             print('initial scores:', scores)
             if model_b == None:
-                # model_a wins by default
-                # scores = update_elo(scores, model_a)
-                # print(f"{model_a} wins by default")
                 print('Bye for', model_a)
             else:
                 print('scores: ', scores)
@@ -162,30 +154,20 @@ if __name__ == "__main__":
                 debate_history_file = f"{round_dir}/{pairing_i}_{save_model_a_name}_{save_model_b_name}_debate_history.jsonl"
                 judge_save_file = f"{round_dir}/{pairing_i}_{save_model_a_name}_{save_model_b_name}_judge_results.jsonl"
 
-                # if no file
-                if not os.path.exists(debate_history_file):
-                    # create file
-                    open(debate_history_file, 'w').close()
-                    open(judge_save_file, 'w').close()
-                    raise Exception('end')
                 print('---- Peer Battles ----')
-                debates = make_pair_debate_many_questions(model_a, model_b, questions,
+                debates = make_pair_debate_many_questions(promptor, model_a, model_b, questions,
                                                           debate_history_file,
-                                                          shuffle_ab = args.shuffle_ab,
-                                                          language = args.language)
+                                                          shuffle_ab = args.shuffle_ab)
 
                 print('---- Peer Reviews ----')
-                evals, elo_scores = peer_evaluate_many_debates(debates, committee, args.judge_debate_rounds,
+                evals, elo_scores = peer_evaluate_many_debates(promptor, debates, committee, args.judge_debate_rounds,
                                                                judge_save_file,
                                                                initial_score=scores, print_scores = False,
-                                                               evaluate_first_turn = args.evaluate_first_turn,
-                                                               language = args.language)
+                                                               evaluate_first_turn = args.evaluate_first_turn)
                 print('Win rates: ')
                 print(calculate_win_rate(evals, args.judge_debate_rounds)['overall_win_rate'])
                 all_judge_results.extend(evals)
-                # scores = elo_scores # update scores
 
-                # raise Exception("Stop here")
             mle_elo, _ = compute_mle_elo(all_judge_results, args.judge_debate_rounds)
             # update scores
             for model in player_names:
@@ -198,8 +180,13 @@ if __name__ == "__main__":
         elo_history_df = pd.DataFrame.from_dict(elo_history)
         elo_history_df.to_csv(f"{round_dir}/elo_history.csv")
         print(f"Round {round_num+1} Scores sorted: {sorted(player_names, key=lambda p: -scores[p])}")
+        elos_dfs.append(elo_history_df)
     
     # Sort players by their final scores for the final ranking
     final_ranking = sorted(player_names, key=lambda p: -scores[p])
     print("Final Ranking:", final_ranking)
     print("Final Scores:", scores)
+
+    # concatenate all elo histories vertically
+    all_elos_df = pd.concat(elos_dfs, axis=0)
+    all_elos_df.to_csv(f"{args.tournament_dir}/elo_history.csv")

@@ -4,12 +4,15 @@ import jsonlines
 import os
 
 ref_answer_file = 'data/all_results/ref_answers.jsonl'
-# create file if doesn't exist
+
 if not os.path.exists(ref_answer_file):
+    # create file if doesn't exist
     open(ref_answer_file, 'w').close()
-# read
-with jsonlines.open(ref_answer_file) as reader:
-    ref_answers = [obj for obj in reader][0]
+    ref_answers = []
+else:
+    # else read
+    with jsonlines.open(ref_answer_file) as reader:
+        ref_answers = [obj for obj in reader][0]
 
 TIE_DELTA = 0.1
 
