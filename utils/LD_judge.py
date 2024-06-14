@@ -1,8 +1,12 @@
 from utils.api_utils import generate_response
 import re
 import jsonlines
+import os
 
 ref_answer_file = 'data/all_results/ref_answers.jsonl'
+# create file if doesn't exist
+if not os.path.exists(ref_answer_file):
+    open(ref_answer_file, 'w').close()
 # read
 with jsonlines.open(ref_answer_file) as reader:
     ref_answers = [obj for obj in reader][0]
