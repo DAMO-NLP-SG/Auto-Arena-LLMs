@@ -3,6 +3,14 @@ This is the repo for paper "Auto Arena of LLMs: Automating LLM Evaluations with 
 [Project Website](https://auto-arena.github.io/) | [Paper](https://arxiv.org/abs/2405.20267)
 
 
+<script
+	type="module"
+	src="https://gradio.s3-us-west-2.amazonaws.com/4.27.0/gradio.js"
+></script>
+
+<gradio-app src="https://auto-arena-leaderboard.hf.space"></gradio-app>
+
+
 ## How to use the repository
 
 Prepare the environment:
