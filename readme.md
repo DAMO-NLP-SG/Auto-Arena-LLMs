@@ -1,14 +1,6 @@
 This is the repo for paper "Auto Arena of LLMs: Automating LLM Evaluations with Agent Peer-battles and Committee Discussions".
 
-[Project Website](https://auto-arena.github.io/) | [Paper](https://arxiv.org/abs/2405.20267)
-
-
-<iframe
-    src="https://auto-arena-leaderboard.hf.space"
-    frameborder="0"
-    width="850"
-    height="450"
-></iframe>
+[Project Website](https://auto-arena.github.io/) | [Paper](https://arxiv.org/abs/2405.20267) | [Leaderboard](https://huggingface.co/spaces/Auto-Arena/Leaderboard)
 
 ## How to use the repository
 
