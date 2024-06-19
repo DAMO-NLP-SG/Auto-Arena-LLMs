@@ -115,7 +115,7 @@ class Judge:
             winner = "A"
         elif "[[B]]" in judgement:
             winner = "B"
-        elif '[[Tie]]' in judgement or self.promptor.tie in judgement:
+        elif '[[Tie]]' in judgement:
             winner = "tie"
 
         self.chat_history.append({'role': 'assistant', 'content': judgement})
@@ -184,10 +184,12 @@ def peer_evaluate(promptor, committee, debate,
         if debate['question']['domain'] in promptor.cats_in_language(NEED_REF_CATS):
             best_committee_member = committee[0]
             # if we have never generated ref answers in this language, initialize as empy
+            if promptor.lang not in ref_answers:
+                ref_answers[promptor.lang] = {}
             if best_committee_member not in ref_answers[promptor.lang].keys():
                 ref_answers[promptor.lang][best_committee_member] = {}
             # if we have a reference answer for this question
-            if str(debate['gamekey'][0]) in ref_answers[promptor.lang][best_committee_member].keys():
+            if promptor.lang in ref_answers and str(debate['gamekey'][0]) in ref_answers[promptor.lang][best_committee_member].keys():
                 ref_answer = ref_answers[promptor.lang][best_committee_member][str(debate['gamekey'][0])]
             # else generate a new one
             else:

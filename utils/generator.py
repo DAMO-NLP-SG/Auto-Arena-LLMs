@@ -1,14 +1,14 @@
-from utils.api_utils import chat_completion_openai
+from utils.api_utils import chat_completion_openai, chat_completion_azure
 import jsonlines
 from collections import defaultdict 
 import os
 
 class Generator:
-    def __init__(self, promptor, model_name='gpt-4-turbo-preview',
+    def __init__(self, promptor, model_name='gpt4o-0513',
         question_file='data/generated_questions_medium_difficult.jsonl', 
-        n_each_time=10):
+        n_each_time=1):
         self.promptor = promptor
-        # Currently points to gpt-4-turbo-2024-04-09.
+        # Currently points to gpt4o-0513
         self.model_name = model_name
         self.domains = promptor.domain_list
         if promptor.lang == 'en':
@@ -29,10 +29,16 @@ class Generator:
         #qs: a string with 1. to 10.
         questions_parsed = []
         for i in range(1, self.n_each_time+1):
-            if i == self.n_each_time: #last one
-                q = qs.split(f"({i}).")[1].strip()
-            else:
-                q = qs.split(f"({i}).")[1].split(f"({i+1}).")[0].strip()
+            if f"({i})." in qs:
+                if i == self.n_each_time: #last one
+                    q = qs.split(f"({i}).")[1].strip()
+                else:
+                    q = qs.split(f"({i}).")[1].split(f"({i+1}).")[0].strip()
+            else: # sometimes the generator may overlook the dot. (). -> ()
+                if i == self.n_each_time: #last one
+                    q = qs.split(f"({i})")[1].strip()
+                else:
+                    q = qs.split(f"({i})")[1].split(f"({i+1})")[0].strip()
             questions_parsed.append(q)
         return questions_parsed
 
@@ -44,7 +50,7 @@ class Generator:
             prompt = self.get_prompt(domain, self.n_each_time)
             sample_n = num_each_domain_to_generate//self.n_each_time
             message = [{"role": "system", "content": prompt}]
-            all_responses = chat_completion_openai(self.model_name, message, temperature = 0.7, max_tokens = 3000, n = int(sample_n))
+            all_responses = chat_completion_azure(self.model_name, message, temperature = 0.7, max_tokens = 3000, n = int(sample_n))
             if sample_n != 1:
                 for r in all_responses:
                     questions[domain] += self.parse_questions(r)
@@ -86,11 +92,10 @@ def load_question_from_generator(promptor, question_save_file, num_each_domain_t
 
     # generate if no questions
     if not os.path.exists(gen.question_file):
-        gen.generate_questions(num_each_domain_to_generate=30)
+        gen.generate_questions(num_each_domain_to_generate=1)
 
     # load questions
     questions = gen.load_questions(num_each_domain_to_load = num_each_domain_to_load)
     print(f"Loaded {len(questions)} questions from {gen.question_file}")
 
     return questions
-

@@ -1,11 +1,15 @@
 import jsonlines
 import os
 import tiktoken
-
+import json
 
 def read_jsonl(file_path):
     with jsonlines.open(file_path) as reader:
         return [obj for obj in reader]
+
+def write_jsonl(data, path):
+    with open(path, 'a') as f:
+        f.write(json.dumps(data, ensure_ascii=False)+"\n")
 
 def read_jsonl_if_exists(fname):
     if os.path.exists(fname):

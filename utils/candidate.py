@@ -50,8 +50,8 @@ class Candidate:
             print('model: ', self.model_name, 'actions_undone:', actions_undone)
 
             # generate missing action prompt
-            actions_undone = ', '.join(actions_undone)
-            missing_action_prompt = self.promptor.missing_actions_prompts.replace('//ACTIONS_UNDONE//', actions_undone)
+            actions_undone_text = ', '.join(actions_undone)
+            missing_action_prompt = self.promptor.missing_actions_prompts.replace('//ACTIONS_UNDONE//', actions_undone_text)
             tmp_chat_history = self.chat_history.copy() + [{"role": "user", 
                               "content": missing_action_prompt}]
             
@@ -66,12 +66,17 @@ class Candidate:
             response['original'] += new_response
             response['no_thought'] = self.no_thought_content(response['parsed'])
             
-            # append to chat history
-            self.chat_history[-1]['content'] += response['original']
+            
             
             # update undone actions
             actions_done = [p[0] for p in response['parsed']]
-            actions_undone = [a for a in self.actions if a not in actions_done]
+            actions_undone_new = [a for a in self.actions if a not in actions_done]
+
+            # append to chat history
+            if len(actions_undone_new) < len(actions_undone):
+                self.chat_history[-1]['content'] += response['original']
+                actions_undone = actions_undone_new
+
             try_count += 1
             used_tokens += count_tokens(new_response)
         return response
@@ -88,7 +93,7 @@ class Candidate:
     def append_action_to_parsed_list(self, parsed, action, content):
         # all actions (except think) should be used only once
         done_actions = [p[0] for p in parsed]
-        if action not in done_actions or action == self.promptor.action_en_to_lang['<think>']:
+        if action not in done_actions or action == self.promptor.acts_in_language(['<think>'])[0]:
             # add to parsed
             parsed.append((action, content))
         else:
