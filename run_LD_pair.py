@@ -1,6 +1,7 @@
 from utils.generator import load_question_from_generator
 from LD_utils.LD_pair import make_pair_debate_many_questions, peer_evaluate_many_debates
 import argparse
+from utils.prompts import Prompter
 
 if __name__ == "__main__":
     # read arguments
@@ -17,6 +18,8 @@ if __name__ == "__main__":
     parser.add_argument("--evaluate_first_turn", action="store_true", help="whether to evaluate the first turn of the debate")
 
     args = parser.parse_args()
+    
+    promptor = Prompter(args.language)
 
     all_models = ['gpt-4-turbo-2024-04-09', 'Qwen/Qwen1.5-72B-Chat', 'claude-3-haiku-20240307',
                   'zero-one-ai/Yi-34B-Chat', 'mistralai/Mixtral-8x7B-Instruct-v0.1', 'gpt-35-turbo-0125',
@@ -25,20 +28,18 @@ if __name__ == "__main__":
     # committee
     args.committee = [m for m in all_models if m not in [args.model_a, args.model_b]]
     print('Arguments: ', args)
-    args.all_judge_file = 'data/all_results/all_judge_results_LD.jsonl'
-    args.all_debate_file = 'data/all_results/all_debate_history_LD.jsonl'
 
 
     print('************* STAGE 1: Question Generation *************')
-    questions = load_question_from_generator(args.question_save_file, args.num_each_domain_to_load)
+    questions = load_question_from_generator(promptor, args.question_save_file, args.num_each_domain_to_load)
 
     print('***************** STAGE 2: Peer Battles ****************')
-    debates = make_pair_debate_many_questions(args.model_a, args.model_b, questions,
-                                              args.debate_history_file, args.all_debate_file,
+    debates = make_pair_debate_many_questions(promptor, args.model_a, args.model_b, questions,
+                                              args.debate_history_file,
                                               shuffle_ab = args.shuffle_ab)
 
     print('****************** STAGE 3: Peer Review ****************')
-    evals, _ = peer_evaluate_many_debates(debates, args.committee, args.judge_debate_rounds,
-                                           args.judge_save_file, args.all_judge_file, print_scores = True,
+    evals, _ = peer_evaluate_many_debates(promptor, debates, args.committee, args.judge_debate_rounds,
+                                           args.judge_save_file, print_scores = True,
                                            evaluate_first_turn = args.evaluate_first_turn)
     

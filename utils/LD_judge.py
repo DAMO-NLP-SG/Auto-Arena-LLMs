@@ -8,7 +8,7 @@ ref_answer_file = 'data/all_results/ref_answers.jsonl'
 if not os.path.exists(ref_answer_file):
     # create file if doesn't exist
     open(ref_answer_file, 'w').close()
-    ref_answers = []
+    ref_answers = {}
 else:
     # else read
     with jsonlines.open(ref_answer_file) as reader:
@@ -183,7 +183,9 @@ def peer_evaluate(promptor, committee, debate,
         ############### STEP0: REFERENCE ANSWERS ################
         if debate['question']['domain'] in promptor.cats_in_language(NEED_REF_CATS):
             best_committee_member = committee[0]
-            # if we have never generated ref answers in this language, initialize as empy
+            # if we have never generated ref answers in this language, initialize as empty
+            if promptor.lang not in ref_answers.keys():
+                ref_answers[promptor.lang] = {}
             if best_committee_member not in ref_answers[promptor.lang].keys():
                 ref_answers[promptor.lang][best_committee_member] = {}
             # if we have a reference answer for this question
