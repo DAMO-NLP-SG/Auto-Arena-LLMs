@@ -6,8 +6,6 @@ import os
 ref_answer_file = 'data/all_results/ref_answers.jsonl'
 
 if not os.path.exists(ref_answer_file):
-    # create file if doesn't exist
-    open(ref_answer_file, 'w').close()
     ref_answers = {}
 else:
     # else read
