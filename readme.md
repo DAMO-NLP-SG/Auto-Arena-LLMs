@@ -1,13 +1,16 @@
-This is the repo for paper "Auto Arena of LLMs: Automating LLM Evaluations with Agent Peer-battles and Committee Discussions".
+This is the repo for paper "Auto-Arena: Automating LLM Evaluations with Agent Peer-battles and Committee Discussions".
 
-[Project Website](https://auto-arena.github.io/) | [Paper](https://arxiv.org/abs/2405.20267) | [Leaderboard](https://huggingface.co/spaces/Auto-Arena/Leaderboard)
+## Reproducing the graphs and figures
 
-## How to use the repository
+All code for reproducing the graphs and figures are included in analysis_scripts/result_analysis.ipynb
+
+
+## How to use the repository to run code
 
 Prepare the environment:
 1. Set up the environment using: conda env create -f env.yml
 2. Activate the environment with: conda activate LLM_Eval
-3. Make sure you have the environment variables listed in [APIs](#apis-used-for-running-the-models)
+3. Make sure you have the environment variables listed in utils/api_utils.py
 
 Before including any participants, make sure:
 1. The participant's calling function is written in the "generate_response" function inside "utils/api_utils.py".
@@ -19,7 +22,7 @@ Before including any participants, make sure:
 
 **To add a new participant to a finished tournament**, here is an example command:
 
-1. python run_tournament_add_participant.py --tournament_dir data/main_tour_40 --add_participant SenseChat_5
+1. python run_tournament_add_participant.py --tournament_dir data/main_tour_40 --add_participant gemini-1.5-flash-exp-0827
 
 **To run debates between a pair of selected models**, here is an example command:
 

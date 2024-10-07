@@ -21,3 +21,11 @@ mistral-large-2402,81.2
 command-r-plus,75.7
 qwen-max-0428,-1
 gpt-4o-2024-05-13,87.2
+Qwen/Qwen2-72B-Instruct, 84.2
+claude-3-5-sonnet-20240620,88.7
+gpt-3.5-turbo-0613,70
+gpt-4o-mini,85.2
+google/gemma-2-27b-it,75.2
+deepseek-chat,78.5
+meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo,86.0
+gemini-1.5-flash-exp-0827,78.9

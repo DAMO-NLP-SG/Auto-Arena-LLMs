@@ -88,7 +88,7 @@ class Candidate:
     def append_action_to_parsed_list(self, parsed, action, content):
         # all actions (except think) should be used only once
         done_actions = [p[0] for p in parsed]
-        if action not in done_actions or action == self.promptor.action_en_to_lang['<think>']:
+        if action not in done_actions or action == self.promptor.acts_in_language(['<think>'])[0]:
             # add to parsed
             parsed.append((action, content))
         else:

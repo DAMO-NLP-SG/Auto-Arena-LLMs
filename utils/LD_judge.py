@@ -23,6 +23,7 @@ one_score_pattern_backup = re.compile("\[(\d+\.?\d*)\]")
 # Categories that need reference answers
 NEED_REF_CATS = ["math", "reasoning", "coding"]
 
+
 class Judge:
 
     def __init__(self, promptor, model_name):
@@ -48,6 +49,7 @@ class Judge:
                 for (role, response) in round:
                     content = response['original']
                     chat_history += self.promptor.assistant.replace('//ROLE//', role.upper()) + f':\n{content}\n'
+                    
         else:
             # the debate only has one round? what happened?
             if len(debate['rounds']) == 1:
@@ -57,6 +59,8 @@ class Judge:
 
                 b_response = debate['rounds'][0][1][1]['original']
                 chat_history += f'{self.promptor.assistant.replace("//ROLE//", "B")}:\n{b_response}\n'
+                print(chat_history)
+                raise Exception('Not implemented yet')
             else:
                 # if the debate has more than one round, but we only want to evaluate 1 round (without peer battle)
                 chat_history += f'\n\n{self.promptor.round_instruction.replace("//NUM//", "1")}\n'
@@ -66,7 +70,7 @@ class Judge:
                 # second round first response
                 b_response = debate['rounds'][1][0][1]['original']
                 chat_history += f'{self.promptor.assistant.replace("//ROLE//", "B")}:\n{b_response}\n'
-
+                
         return chat_history
     
     def receive_previous_response(self, eval_history):
@@ -97,9 +101,7 @@ class Judge:
 
         max_tokens = int(self.promptor.judge_word_limit * self.promptor.word2token)
         try:
-            print(self.chat_history)
             judgement = generate_response(self, self.chat_history, n = 1, max_tokens = max_tokens)
-            print('Judgement:', judgement)
         except Exception as e:
             if hasattr(e, 'param') and e.param in ['max_tokens', 'security']:
                 judgement = '$ERROR$'
@@ -149,6 +151,7 @@ def generate_ref_answer(promptor, model_name, question):
 
 def peer_evaluate(promptor, committee, debate, 
                   judge_save_file = None,
+                  all_judge_file = None,
                   judge_debate_rounds = 0,
                   evaluate_turn = 'LD',
                   previous_history = None):
@@ -160,17 +163,41 @@ def peer_evaluate(promptor, committee, debate,
         judge_debate_rounds: int, the number of rounds to debate among judges, default is 0 (no debate, majority vote)
         previous_history: dict, the previous history of the debate, 
             this is only passed when the debate has been partially evaluated (not enough rounds)
+        need_more_judges: bool, the debate has been evaluated but with different judges.
+            we need to evaluate with the missing judges and debate
     '''
     # if any is error, return error
     if previous_history is not None:
-        judge_dict = previous_history
+        judge_dict = previous_history.copy()
         judges = []
         judge_dict['judge_debate_rounds'] = judge_debate_rounds
-        # initialize judges as objects with previous history
+        
+        # if we don't have enough judges
+        if 'final_winner' not in previous_history.keys():
+            winners = [previous_history[j]['winner'][0] for j in previous_history['judges']]
+        
         for judge_name in committee:
-            j = Judge(judge_name)
-            j.receive_previous_response(previous_history)
-            judges.append(j)
+            # if this judge has already evaluated
+            if judge_name in previous_history['judges']:
+                j = Judge(promptor, judge_name)
+                j.receive_previous_response(previous_history)
+                judges.append(j)
+            # if this judge has not evaluated
+            else:
+                print(f'Generating initial verdicts for missing judges: {judge_name}')
+                j = Judge(promptor, judge_name)
+                ref_answer = previous_history['ref_answer']
+                # get first evaluation
+                winner, judgement, dh = j.get_evaluation(debate, ref_answer, evaluate_turn = evaluate_turn)
+                winners.append(winner)
+                judge_dict[judge_name] = {"winner": [winner], "judgement": [judgement]}
+                
+                judges.append(j)
+
+        if 'final_winner' not in judge_dict.keys():
+            final_winner = majority_vote(winners)
+            judge_dict['final_winner'] = [final_winner]
+            judge_dict['judges'] = committee
 
     else:
         winners = []
@@ -178,6 +205,7 @@ def peer_evaluate(promptor, committee, debate,
                     'num_rounds': evaluate_turn, 'judge_debate_rounds': judge_debate_rounds,
                     'ref_answer': None}
         judges = []
+
         ############### STEP0: REFERENCE ANSWERS ################
         if debate['question']['domain'] in promptor.cats_in_language(NEED_REF_CATS):
             best_committee_member = committee[0]
@@ -240,5 +268,8 @@ def peer_evaluate(promptor, committee, debate,
         # append to current history
         with jsonlines.open(judge_save_file, 'a') as writer:
             writer.write(judge_dict)
-            
+
+        # append to all history
+        with jsonlines.open(all_judge_file, 'a') as writer:
+            writer.write(judge_dict)
     return judge_dict

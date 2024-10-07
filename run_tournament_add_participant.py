@@ -5,12 +5,14 @@ import argparse
 from tqdm import tqdm
 
 from utils.generator import load_question_from_generator
-from utils.LD_pair import make_pair_debate_many_questions, peer_evaluate_many_debates 
-from utils.score_utils import compute_mle_elo, preety_print_model_ratings, calculate_win_rate
+from utils.LD_pair import make_pair_debate_many_questions, peer_evaluate_many_debates, get_committee
+from utils.score_utils import compute_mle_elo, preety_print_model_ratings, calculate_win_rate, compute_elo
 import pandas as pd
 from collections import defaultdict
 import os
 from utils.common_utils import read_jsonl
+from utils.prompts import Prompter
+from utils.common_utils import init_all_results
 
 def read_tournament(tournament_dir, judge_debate_rounds, new_participant):
     # find all judge files
@@ -100,17 +102,19 @@ if __name__ == "__main__":
     parser.add_argument("--language", type=str, default='en', help="language used for evaluation")
     
     args = parser.parse_args()
-    if args.language == 'zh' and 'zh' not in args.tournament_dir:
-        raise Exception("Mismatch between language and tournament directory. Please use a directory with 'zh' in the name.")
-    if args.language not in ['en', 'zh']:
-        raise Exception("Invalid language. Choose either 'en' or 'zh'.")
+    if args.language != 'en' and args.language not in args.tournament_dir:
+        raise Exception(f"Mismatch between language and tournament directory. Please use a directory with {args.language} in the name.")
     
-    # args.all_judge_file = 'data/all_results/all_judge_results_LD.jsonl'
-    # args.all_debate_file = 'data/all_results/all_debate_history_LD.jsonl'
+    args.all_debate_file = f'data/all_results/all_debate_history_{args.language}.jsonl'
+    args.all_judge_file = f'data/all_results/all_judge_results_{args.language}.jsonl'
+    init_all_results(args.tournament_dir, args.all_debate_file, args.all_judge_file)
 
     # read previous tournament history
     judge_results, previous_matchups, previous_participants = read_tournament(args.tournament_dir, args.judge_debate_rounds, args.add_participant)
 
+    if args.add_participant in previous_participants:
+        raise Exception(f"Participant {args.add_participant} already exists in the tournament.")
+    
     # update all player names
     player_names = previous_participants + [args.add_participant]
 
@@ -138,9 +142,10 @@ if __name__ == "__main__":
     ############################################################
     ################### 1. LOAD QUESTIONS ######################
     ############################################################
+    promptor = Prompter(args.language)
 
     # load questions
-    questions = load_question_from_generator(args.question_save_file, args.num_each_domain_to_load, language = args.language)
+    questions = load_question_from_generator(promptor, args.question_save_file, args.num_each_domain_to_load)
 
     # determine where to save this round's results
     existing_rounds = [f for f in os.listdir(args.tournament_dir) if os.path.isdir(f"{args.tournament_dir}/{f}")]
@@ -196,8 +201,7 @@ if __name__ == "__main__":
         print('initial scores:', scores)
         # committee in descending order of scores
         committee = sorted(scores, key=scores.get, reverse=True)
-        committee = [c for c in committee if c != model_a and c != model_b][:5]
-        print('Committee:', committee)
+        committee = get_committee(committee, model_a, model_b)
 
         save_model_a_name = model_a.replace('/', '_')
         save_model_b_name = model_b.replace('/', '_')
@@ -206,17 +210,17 @@ if __name__ == "__main__":
         judge_save_file = f"{round_dir}/{pairing_num}_{save_model_a_name}_{save_model_b_name}_judge_results.jsonl"
 
         print('---- Peer Battles ----')
-        debates = make_pair_debate_many_questions(model_a, model_b, questions,
+        debates = make_pair_debate_many_questions(promptor, model_a, model_b, questions,
                                                     debate_history_file,
-                                                    shuffle_ab = args.shuffle_ab,
-                                                    language = args.language)
+                                                    all_debate_file = args.all_debate_file,
+                                                    shuffle_ab = args.shuffle_ab)
 
         print('---- Peer Reviews ----')
-        evals, elo_scores = peer_evaluate_many_debates(debates, committee, args.judge_debate_rounds,
+        evals, elo_scores = peer_evaluate_many_debates(promptor, debates, committee, args.judge_debate_rounds,
                                                         judge_save_file,
+                                                        all_judge_file = args.all_judge_file,
                                                         initial_score=scores, print_scores = True,
-                                                        evaluate_first_turn = False,
-                                                        language = args.language)
+                                                        evaluate_first_turn = False)
         print('Win rates: ')
         print(calculate_win_rate(evals, args.judge_debate_rounds)['overall_win_rate'])
         judge_results.extend(evals)
@@ -225,17 +229,19 @@ if __name__ == "__main__":
         for model in player_names:
             if model in mle_elo:
                 scores[model] = mle_elo[model]
+            # scores[model] = elo_scores[model]
 
         print('final scores:', scores)
         for model in player_names:
             elo_history[model].append(scores[model])
 
-        elo_history_df = pd.DataFrame.from_dict(elo_history)
-        elo_history_df.to_csv(f"{round_dir}/elo_history.csv")
-        print(f"Round Scores sorted: {sorted(player_names, key=lambda p: -scores[p])}")
     
     # Sort players by their final scores for the final ranking
     final_ranking = sorted(player_names, key=lambda p: -scores[p])
     print("Final Ranking:", final_ranking)
     print('Final MLE ELO scores:')
     print(preety_print_model_ratings(compute_mle_elo(judge_results, args.judge_debate_rounds)[1]))
+
+    elo_history_df = pd.DataFrame.from_dict(elo_history)[final_ranking]
+    elo_history_df.to_csv(f"{round_dir}/elo_history.csv")
+    print(f"Round Scores sorted: {sorted(player_names, key=lambda p: -scores[p])}")

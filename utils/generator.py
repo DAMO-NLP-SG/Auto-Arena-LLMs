@@ -1,10 +1,10 @@
-from utils.api_utils import chat_completion_openai
+from utils.api_utils import generate_response
 import jsonlines
 from collections import defaultdict 
 import os
 
 class Generator:
-    def __init__(self, promptor, model_name='gpt-4-turbo-preview',
+    def __init__(self, promptor, model_name='gpt-4-turbo-2024-04-09',
         question_file='data/generated_questions_medium_difficult.jsonl', 
         n_each_time=10):
         self.promptor = promptor
@@ -12,6 +12,7 @@ class Generator:
         self.model_name = model_name
         self.domains = promptor.domain_list
         if promptor.lang == 'en':
+            self.domains = promptor.domain_list
             self.question_file = question_file
         else:
             # don't overlap with previous debate questions
@@ -27,6 +28,7 @@ class Generator:
 
     def parse_questions(self, qs):
         #qs: a string with 1. to 10.
+        print('qs:', qs)
         questions_parsed = []
         for i in range(1, self.n_each_time+1):
             if i == self.n_each_time: #last one
@@ -36,7 +38,9 @@ class Generator:
             questions_parsed.append(q)
         return questions_parsed
 
-    def generate_questions(self, num_each_domain_to_generate = 30):
+    def generate_questions(self, num_each_domain_to_generate = 30, domains = None):
+        if domains is not None:
+            self.domains = domains
         # num each domain: should be a multiple of n_each_time
         questions = {}
         for domain in self.domains:
@@ -44,7 +48,9 @@ class Generator:
             prompt = self.get_prompt(domain, self.n_each_time)
             sample_n = num_each_domain_to_generate//self.n_each_time
             message = [{"role": "system", "content": prompt}]
-            all_responses = chat_completion_openai(self.model_name, message, temperature = 0.7, max_tokens = 3000, n = int(sample_n))
+            all_responses = generate_response(self.model_name, message, temperature = 0.7, 
+                                              max_tokens = 3000, n = int(sample_n), 
+                                              model_name = self.model_name)
             if sample_n != 1:
                 for r in all_responses:
                     questions[domain] += self.parse_questions(r)

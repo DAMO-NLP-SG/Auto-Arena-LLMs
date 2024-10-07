@@ -2,13 +2,13 @@ import math
 from typing import Dict, List, Tuple
 import argparse
 from utils.generator import load_question_from_generator
-from utils.LD_pair import make_pair_debate_many_questions, peer_evaluate_many_debates 
+from utils.LD_pair import make_pair_debate_many_questions, peer_evaluate_many_debates, get_committee
 from utils.score_utils import compute_mle_elo, calculate_win_rate
 import pandas as pd
 from collections import defaultdict
 import os
 from utils.prompts import Prompter
-
+from utils.common_utils import init_all_results
 def pair_players(
     names: List[str], previous_matchups: Dict[str, set]
 ) -> List[Tuple[str, str]]:
@@ -58,16 +58,17 @@ if __name__ == "__main__":
     parser.add_argument("--shuffle_ab", type=bool, default=True, help="whether to shuffle the order of model_a and model_b")
     parser.add_argument("--evaluate_first_turn", action="store_true", help="whether to evaluate the first turn of the debate")
     parser.add_argument("--language", type=str, default='en', help="language used for evaluation")
-    
+
     args = parser.parse_args()
     if args.language != 'en' and args.language not in args.tournament_dir:
         raise Exception(f"Mismatch between language and tournament directory. Please use a directory with {args.language} in the name.")
     
     if args.language == 'en':
-        # 7 models initially
-        player_names = ['gpt-4-turbo-2024-04-09', 'Qwen/Qwen1.5-72B-Chat', 'claude-3-haiku-20240307',
-                    'zero-one-ai/Yi-34B-Chat', 'mistralai/Mixtral-8x7B-Instruct-v0.1', 'gpt-35-turbo-0125',
-                    'meta-llama/Llama-2-70b-chat-hf']
+        player_names = ['gpt-4-turbo-2024-04-09', 'Qwen/Qwen1.5-72B-Chat', 'command-r-plus',
+                         'claude-3-haiku-20240307', 'zero-one-ai/Yi-34B-Chat', 
+                         'mistralai/Mixtral-8x7B-Instruct-v0.1', 'gpt-35-turbo-0125', 
+                         'meta-llama/Llama-2-70b-chat-hf', 'deepseek-ai/deepseek-llm-67b-chat']
+        
     elif args.language == 'zh':
         # also include chinese models
         player_names = ['gpt-4-turbo-2024-04-09', 'meta-llama/Llama-3-70b-chat-hf', 'claude-3-haiku-20240307',
@@ -75,6 +76,10 @@ if __name__ == "__main__":
                         'deepseek-ai/deepseek-llm-67b-chat', 'glm-4', 
                         'wenxin-4', 'minimax-abab6.5-chat', 'SenseChat-5']
         
+    args.all_debate_file = f'data/all_results/all_debate_history_{args.language}.jsonl'
+    args.all_judge_file = f'data/all_results/all_judge_results_{args.language}.jsonl'
+    init_all_results(args.tournament_dir, args.all_debate_file, args.all_judge_file)
+
     # organized according to MMLU ranking
     mmlu_ratings = pd.read_csv('data/MMLU.csv')
     mmlu_ratings = mmlu_ratings[mmlu_ratings['Model'].isin(player_names)]
@@ -145,8 +150,7 @@ if __name__ == "__main__":
                 print('scores: ', scores)
                 # committee in descending order of scores
                 committee = sorted(scores, key=scores.get, reverse=True)
-                committee = [c for c in committee if c != model_a and c != model_b][:5]
-                print('Committee:', committee)
+                committee = get_committee(committee, model_a, model_b)
                     
                 save_model_a_name = model_a.replace('/', '_')
                 save_model_b_name = model_b.replace('/', '_')
@@ -157,11 +161,13 @@ if __name__ == "__main__":
                 print('---- Peer Battles ----')
                 debates = make_pair_debate_many_questions(promptor, model_a, model_b, questions,
                                                           debate_history_file,
+                                                          all_debate_file = args.all_debate_file,
                                                           shuffle_ab = args.shuffle_ab)
 
                 print('---- Peer Reviews ----')
                 evals, elo_scores = peer_evaluate_many_debates(promptor, debates, committee, args.judge_debate_rounds,
                                                                judge_save_file,
+                                                               all_judge_file = args.all_judge_file,
                                                                initial_score=scores, print_scores = False,
                                                                evaluate_first_turn = args.evaluate_first_turn)
                 print('Win rates: ')
@@ -174,6 +180,7 @@ if __name__ == "__main__":
                 if model in mle_elo:
                     scores[model] = mle_elo[model]
             print('final scores:', scores)
+            # save elo history
             for model in player_names:
                 elo_history[model].append(scores[model])
 
@@ -189,4 +196,6 @@ if __name__ == "__main__":
 
     # concatenate all elo histories vertically
     all_elos_df = pd.concat(elos_dfs, axis=0)
+    # reorganize the column names according to final_ranking
+    all_elos_df = all_elos_df[final_ranking]
     all_elos_df.to_csv(f"{args.tournament_dir}/elo_history.csv")

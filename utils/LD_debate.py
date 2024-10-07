@@ -4,17 +4,21 @@ import jsonlines
 
 # Lincoln Douglas style debate
 
-def save_history(history, debate_history_file):
-
+def save_history(history, debate_history_file, all_debate_history_file):
+    # if debate_history_file is not None and all_debate_history_file is not None:
     if debate_history_file is not None:
     
         # save history to own file
         with jsonlines.open(debate_history_file, 'a') as writer:
             writer.write(history)
             
+        # save to all history
+        with jsonlines.open(all_debate_history_file, 'a') as writer:
+            writer.write(history)
 
 def make_pair_debate(promptor, model_a, model_b, question, 
-                     debate_history_file = None):
+                     debate_history_file = None,
+                     all_debate_history_file = None):
     '''
     Input:
         model_a: str, model name
@@ -76,37 +80,38 @@ def make_pair_debate(promptor, model_a, model_b, question,
             print(f'Encountered error in game [[{gamekey}]] round 2, exiting...')
             history['rounds'].append([('a', a_response_rnd1),
                                         ('b', b_response_rnd1)])
-            
-            save_history(history, debate_history_file)
+        
+            save_history(history, debate_history_file, all_debate_history_file)
             return history
         else:
             raise e
 
     try:
         ############ ROUND 3 ############
-        # a rebuttal
-        can_a.receive_opponent_response(b_response['no_thought'], action_guide = ['<criticize>', '<raise>'])
-        a_response = can_a.get_response(max_tokens = max_tokens)
         # b rebuttal
-        can_b.receive_opponent_response(a_response['no_thought'], action_guide = ['<respond>', '<criticize>', '<raise>'])
-        b_response = can_b.get_response(max_tokens = max_tokens*2)
-        # a final response
-        can_a.receive_opponent_response(b_response['no_thought'], action_guide = ['<respond>'])
-        a_final_response = can_a.get_response(max_tokens = max_tokens)
-        history['rounds'].append([('a', a_response),
-                                ('b', b_response),
-                                ('a', a_final_response)])
+        can_b.receive_opponent_response(a_response['no_thought'], action_guide = ['<criticize>', '<raise>'])
+        b_response = can_b.get_response(max_tokens = max_tokens)
+        # a rebuttal
+        can_a.receive_opponent_response(b_response['no_thought'], action_guide = ['<respond>', '<criticize>', '<raise>'])
+        a_response = can_a.get_response(max_tokens = max_tokens*2)
+        # b final response
+        can_b.receive_opponent_response(a_response['no_thought'], action_guide = ['<respond>'])
+        b_final_response = can_b.get_response(max_tokens = max_tokens)
+
+        history['rounds'].append([('b', b_response),
+                                ('a', a_response),
+                                ('b', b_final_response)])
         
     except Exception as e:
         if hasattr(e, 'param') and e.param in ['max_tokens', 'security']:
             gamekey = history['gamekey']
             print(f'Encountered error in game [[{gamekey}]] round 3, exiting...')
-            save_history(history, debate_history_file)
+            save_history(history, debate_history_file, all_debate_history_file)
             return history
         else:
             raise e
     
-    save_history(history, debate_history_file)
+    save_history(history, debate_history_file, all_debate_history_file)
     
     return history
 

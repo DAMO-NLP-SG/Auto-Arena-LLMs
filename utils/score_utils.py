@@ -145,7 +145,13 @@ def print_eval_results(evals, initial_score = None, print_scores = False, judge_
 def compute_mle_elo(judge_results, judge_debate_rounds, SCALE=400, BASE=10, INIT_RATING=1000):
     model_a = [j['gamekey'][1] for j in judge_results]
     model_b = [j['gamekey'][2] for j in judge_results]
-    winner = [j['final_winner'][judge_debate_rounds] for j in judge_results]
+    winner = []
+    for j in judge_results:
+        try:
+            winner.append(j['final_winner'][judge_debate_rounds])
+        except:
+            print(j)
+            raise Exception(f"Missing final_winner")
     df = pd.DataFrame({'model_a': model_a, 'model_b': model_b, 'winner': winner})
 
     models = pd.concat([df["model_a"], df["model_b"]]).unique()

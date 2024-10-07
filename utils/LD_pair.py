@@ -1,14 +1,26 @@
-from utils.common_utils import read_jsonl_if_exists, match_game_key
+from utils.common_utils import read_jsonl_if_exists, match_game_key, model2family
 from utils.LD_debate import make_pair_debate
 from utils.LD_judge import peer_evaluate
 from utils.score_utils import print_eval_results
 import jsonlines
 import random
 
+def get_committee(committee, model_a, model_b):
+    # exclude models in the same family
+    # exclude deprecated models
+    committee = [c for c in committee if c != model_a and c != model_b\
+                and model2family[c]!=model2family[model_a]\
+                and model2family[c]!=model2family[model_b]\
+                and model2family[c]!= 'deprecated'][:5]
+    if len(committee) != 5:
+        raise Exception('committee not enough at : ', committee)
+    print('Committee:', committee)
+    return committee
 
 # Make a pair of models debate many questions
 def make_pair_debate_many_questions(promptor, model_a, model_b, questions,
                                     debate_history_file,
+                                    all_debate_file,
                                     shuffle_ab = True):
     '''
     Input:
@@ -20,7 +32,8 @@ def make_pair_debate_many_questions(promptor, model_a, model_b, questions,
         debates: [dict] list of debates
     '''
     # read all debates
-    all_debate_history = read_jsonl_if_exists(debate_history_file)
+    all_debate_history = read_jsonl_if_exists(all_debate_file)
+    # all_debate_history = read_jsonl_if_exists(debate_history_file)
     current_debates = []
 
     
@@ -42,7 +55,8 @@ def make_pair_debate_many_questions(promptor, model_a, model_b, questions,
             # make a new debate if not debated
             print(f"New debate for [{question['id']}, {model_a}, {model_b}]")
             peer_battle_history = make_pair_debate(promptor, model_a, model_b, question, 
-                                                   debate_history_file)
+                                                   debate_history_file,
+                                                   all_debate_file)
             current_debates.append(peer_battle_history)
             print('Peer battle completed.')
 
@@ -61,6 +75,7 @@ def make_pair_debate_many_questions(promptor, model_a, model_b, questions,
 # make a committee of models evaluate many debates
 def peer_evaluate_many_debates(promptor, debates, committee, judge_debate_rounds,
                                judge_save_file,
+                               all_judge_file,
                                initial_score = None, print_scores = True,
                                evaluate_first_turn = False):
     '''
@@ -71,8 +86,8 @@ def peer_evaluate_many_debates(promptor, debates, committee, judge_debate_rounds
         judge_save_file: str, file to save judge results
         evaluate_first_turn: whether to evaluate the first turn (a response, b response)
     '''
-    # all_judge_results = read_jsonl_if_exists(all_judge_file)
-    all_judge_results = read_jsonl_if_exists(judge_save_file)
+    all_judge_results = read_jsonl_if_exists(all_judge_file)
+    # all_judge_results = read_jsonl_if_exists(judge_save_file)
     evals = []
 
     if evaluate_first_turn:
@@ -85,37 +100,53 @@ def peer_evaluate_many_debates(promptor, debates, committee, judge_debate_rounds
 
         # check if already evaluated
         matched, gamekey, game = match_game_key(debate['gamekey'][0], debate['gamekey'][1], debate['gamekey'][2], 
-                                                all_judge_results, match_turn=turn, judges=committee, order_matters = False)
-        # already debated with enough rounds
-        if matched and game['judge_debate_rounds'] >=  judge_debate_rounds:
-            # print(f"Already evaluated at {gamekey}")
-            evals.append(game)
+                                                all_judge_results, match_turn=turn, judges=committee, order_matters = True)
+        
+        if matched:
+            # check whether the judges include models from the same families
+            if len(game['judges']) < 5:
+                print(f"Evaluated at {gamekey} but with different judges")
+                eval = peer_evaluate(promptor, committee, debate, 
+                                    judge_save_file,
+                                    all_judge_file,
+                                    judge_debate_rounds = judge_debate_rounds,
+                                    evaluate_turn = turn,
+                                    previous_history = game)
+                evals.append(eval)
 
-            existing_evals = read_jsonl_if_exists(judge_save_file)
-            if game not in existing_evals:
-                # write to own history
-                with jsonlines.open(judge_save_file, 'a') as writer:
-                    writer.write(game)
+            # already debated with enough rounds
+            elif game['judge_debate_rounds'] >=  judge_debate_rounds:
+                # print(f"Already evaluated at {gamekey}")
+                evals.append(game)
+
+                existing_evals = read_jsonl_if_exists(judge_save_file)
+                if game not in existing_evals:
+                    # write to own history
+                    with jsonlines.open(judge_save_file, 'a') as writer:
+                        writer.write(game)
+
+            else:
+                print(f'Evaluated at {gamekey} but only {game["judge_debate_rounds"]} rounds')
+                eval = peer_evaluate(promptor, committee, debate, 
+                                    judge_save_file,
+                                    all_judge_file,
+                                    judge_debate_rounds = judge_debate_rounds,
+                                    evaluate_turn = turn,
+                                    previous_history = game)
+                evals.append(eval)
 
         # not debated at all
-        elif not matched:
+        else:
             print(f"Evaluating Debate: {debate['gamekey']}")
             eval = peer_evaluate(promptor, committee, debate, 
                                 judge_save_file,
+                                all_judge_file,
                                 judge_debate_rounds = judge_debate_rounds,
                                 evaluate_turn = turn)
             
             evals.append(eval)
 
-        # evaluated but not enough rounds
-        else:
-            print(f'Evaluated at {gamekey} but only {game["judge_debate_rounds"]} rounds')
-            eval = peer_evaluate(promptor, committee, debate, 
-                                judge_save_file,
-                                judge_debate_rounds = judge_debate_rounds,
-                                evaluate_turn = turn,
-                                previous_history = game)
-            evals.append(eval)
+            
                 
     elo_scores, win_rates = print_eval_results(evals, initial_score = initial_score,
                                     print_scores = print_scores,
